@@ -23,7 +23,7 @@ export default function Onboarding({ onDone }){
 
   return (
     <Modal open={true} onClose={() => {}} title="Welcome to ChemPrep" size="md">
-      <p className="text-sm text-ink-600 dark:text-ink-300 italic mb-4">"{msg}"<br/><span className="not-italic text-xs text-ink-400">— Prof. Arjun, your mentor</span></p>
+      <p className="text-sm text-ink-600 dark:text-ink-300 italic mb-4">"{msg}"</p>
 
       <label className="label">Your name</label>
       <input className="input mt-1" autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="First name is fine" />
