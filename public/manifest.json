@@ -1,0 +1,103 @@
+{
+  "name": "JEEPrep — by Prof. Arjun",
+  "short_name": "JEEPrep",
+  "description": "AI-powered JEE preparation platform for Physics, Chemistry & Maths",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#6366f1",
+  "lang": "en-IN",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Flashcards",
+      "short_name": "Cards",
+      "description": "Quick revision with SRS flashcards",
+      "url": "/#flashcards",
+      "icons": [{ "src": "/icons/shortcut-cards.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Today's Planner",
+      "short_name": "Planner",
+      "description": "View your study schedule",
+      "url": "/#planner",
+      "icons": [{ "src": "/icons/shortcut-planner.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Formula Sheet",
+      "short_name": "Formulas",
+      "description": "Quick formula reference",
+      "url": "/#formulas",
+      "icons": [{ "src": "/icons/shortcut-formulas.png", "sizes": "96x96" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/dashboard.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "JEEPrep Dashboard"
+    },
+    {
+      "src": "/screenshots/mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "JEEPrep on mobile"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "prefer_related_applications": false
+}
