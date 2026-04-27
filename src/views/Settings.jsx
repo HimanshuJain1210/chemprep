@@ -2,10 +2,13 @@ import React, { useState } from 'react';
 import { Card } from '../components/UI.jsx';
 import {
   User, KeyRound, Cpu, Cloud, Sun, Moon, Laptop,
-  Download, Upload, Trash2, ShieldCheck, Info, CheckCircle2, Zap, Rocket
+  Download, Upload, Trash2, Info, CheckCircle2, Zap, Rocket
 } from 'lucide-react';
-import { getState, setState, replaceState, resetState, DEFAULT_STATE } from '../lib/storage.js';
+import { getState, setState, replaceState, resetState } from '../lib/storage.js';
 import { applyTheme as setTheme, getTheme } from '../lib/theme.js';
+
+// Auto-detect: if not running on localhost, keys live on the server
+const IS_DEPLOYED = !['localhost', '127.0.0.1'].includes(window.location.hostname);
 
 export default function Settings(){
   const state = getState();
@@ -13,6 +16,9 @@ export default function Settings(){
   const [theme, setThemeLocal] = useState(getTheme());
   const [importText, setImportText] = useState('');
   const [msg, setMsg] = useState('');
+
+  // If deployed, proxy is always on — no manual toggle needed
+  const useProxy = IS_DEPLOYED || state.settings.useProxy;
 
   const save = (patch) => setState(patch);
 
@@ -49,11 +55,13 @@ export default function Settings(){
     setMsg('All data reset.');
   };
 
-  const providerOk =
-    provider === 'groq' ? !!state.settings.groqKey :
-    provider === 'openrouter' ? !!state.settings.openrouterKey :
-    provider === 'gemini' ? !!state.settings.geminiKey :
-    provider === 'anthropic' ? !!state.settings.anthropicKey : false;
+  // Key is "ok" if: proxy/deployed (server has it) OR user pasted a local key
+  const localKey =
+    provider === 'groq' ? state.settings.groqKey :
+    provider === 'openrouter' ? state.settings.openrouterKey :
+    provider === 'gemini' ? state.settings.geminiKey : '';
+
+  const providerOk = useProxy || !!localKey;
 
   const setProv = (p) => {
     setProvider(p);
@@ -106,108 +114,104 @@ export default function Settings(){
       {/* AI Provider */}
       <Card className="mb-4">
         <h3 className="font-semibold mb-1 flex items-center gap-2"><Cpu className="w-4 h-4" /> AI provider</h3>
-        <p className="text-xs text-ink-500 dark:text-ink-400 mb-3">Pick one text provider. Gemini is still used for image-doubt solving (vision) regardless of this pick, if its key is present.</p>
+        <p className="text-xs text-ink-500 dark:text-ink-400 mb-3">
+          Pick one text provider. Gemini is still used for image-doubt solving (vision) regardless of this pick, if its key is present.
+        </p>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+        {/* Provider buttons — Anthropic removed */}
+        <div className="grid grid-cols-3 gap-2 mb-4">
           <ProvBtn active={provider==='groq'} onClick={()=>setProv('groq')} Icon={Zap} label="Groq" sub="Recommended" />
           <ProvBtn active={provider==='openrouter'} onClick={()=>setProv('openrouter')} Icon={Rocket} label="OpenRouter" sub="Best reasoning" />
           <ProvBtn active={provider==='gemini'} onClick={()=>setProv('gemini')} Icon={Cloud} label="Gemini" sub="Vision" />
-          <ProvBtn active={provider==='anthropic'} onClick={()=>setProv('anthropic')} Icon={ShieldCheck} label="Anthropic" sub="Paid" />
         </div>
 
-        {provider === 'groq' && (
-          <div className="space-y-3">
-            <div>
-              <label className="label flex items-center gap-1"><KeyRound className="w-3.5 h-3.5" /> Groq API key</label>
-              <input type="password" className="input mt-1" placeholder="gsk_..." value={state.settings.groqKey} onChange={e => save({ settings: { groqKey: e.target.value.trim() } })} />
-              <p className="text-xs text-ink-500 mt-1">Get one free at <a className="text-brand-600 hover:underline" href="https://console.groq.com" target="_blank" rel="noreferrer">console.groq.com</a> — no card needed. Very fast + generous free tier.</p>
-            </div>
-            <div>
-              <label className="label">Model</label>
-              <select className="input mt-1" value={state.settings.groqModel} onChange={e => save({ settings: { groqModel: e.target.value } })}>
-                <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile (best for JEE)</option>
-                <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (fastest)</option>
-                <option value="mixtral-8x7b-32768">Mixtral 8x7B (long context)</option>
-                <option value="gemma2-9b-it">Gemma 2 9B</option>
-              </select>
-            </div>
+        {/* Key status banner */}
+        {IS_DEPLOYED ? (
+          <div className="mb-3 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+            Keys are configured on the server — no input needed here.
           </div>
+        ) : (
+          <>
+            {provider === 'groq' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="label flex items-center gap-1"><KeyRound className="w-3.5 h-3.5" /> Groq API key</label>
+                  <input type="password" className="input mt-1" placeholder="gsk_..." value={state.settings.groqKey} onChange={e => save({ settings: { groqKey: e.target.value.trim() } })} />
+                  <p className="text-xs text-ink-500 mt-1">Get one free at <a className="text-brand-600 hover:underline" href="https://console.groq.com" target="_blank" rel="noreferrer">console.groq.com</a> — no card needed. Very fast + generous free tier.</p>
+                </div>
+                <div>
+                  <label className="label">Model</label>
+                  <select className="input mt-1" value={state.settings.groqModel} onChange={e => save({ settings: { groqModel: e.target.value } })}>
+                    <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile (best for JEE)</option>
+                    <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (fastest)</option>
+                    <option value="mixtral-8x7b-32768">Mixtral 8x7B (long context)</option>
+                    <option value="gemma2-9b-it">Gemma 2 9B</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {provider === 'openrouter' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="label flex items-center gap-1"><KeyRound className="w-3.5 h-3.5" /> OpenRouter API key</label>
+                  <input type="password" className="input mt-1" placeholder="sk-or-..." value={state.settings.openrouterKey} onChange={e => save({ settings: { openrouterKey: e.target.value.trim() } })} />
+                  <p className="text-xs text-ink-500 mt-1">Free tier: 20 req/min, 50 req/day. Get a key at <a className="text-brand-600 hover:underline" href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">openrouter.ai/keys</a>.</p>
+                </div>
+                <div>
+                  <label className="label">Model</label>
+                  <select className="input mt-1" value={state.settings.openrouterModel} onChange={e => save({ settings: { openrouterModel: e.target.value } })}>
+                    <option value="deepseek/deepseek-r1:free">DeepSeek R1 (best reasoning, free)</option>
+                    <option value="deepseek/deepseek-chat-v3.1:free">DeepSeek Chat V3.1 (free)</option>
+                    <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (free)</option>
+                    <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Exp (free)</option>
+                    <option value="qwen/qwen-2.5-72b-instruct:free">Qwen 2.5 72B (free)</option>
+                    <option value="nvidia/llama-3.1-nemotron-70b-instruct:free">Nemotron 70B (free)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {provider === 'gemini' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="label flex items-center gap-1"><KeyRound className="w-3.5 h-3.5" /> Gemini API key</label>
+                  <input type="password" className="input mt-1" placeholder="AIza..." value={state.settings.geminiKey} onChange={e => save({ settings: { geminiKey: e.target.value.trim() } })} />
+                  <p className="text-xs text-ink-500 mt-1">Get at <a className="text-brand-600 hover:underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a>. Keep this key even on other providers so vision works.</p>
+                </div>
+                <div>
+                  <label className="label">Model</label>
+                  <select className="input mt-1" value={state.settings.geminiModel} onChange={e => save({ settings: { geminiModel: e.target.value } })}>
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (recommended)</option>
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                    <option value="gemini-2.5-pro">Gemini 2.5 Pro (100/day)</option>
+                    <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Key status — only shown when running locally */}
+            <div className="mt-3 flex items-center gap-2 text-xs">
+              {providerOk
+                ? <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />Key configured</span>
+                : <span className="text-amber-600 flex items-center gap-1"><Info className="w-3.5 h-3.5" />No key yet — AI features won't work</span>
+              }
+            </div>
+
+            {/* Proxy toggle — only useful when running locally */}
+            <div className="mt-5 p-3 rounded-lg bg-ink-50 dark:bg-ink-900/40 border border-ink-200 dark:border-ink-800">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input type="checkbox" className="mt-0.5" checked={state.settings.useProxy} onChange={e => save({ settings: { useProxy: e.target.checked } })} />
+                <div>
+                  <div className="text-sm font-medium">Use backend proxy</div>
+                  <div className="text-xs text-ink-500">If you deployed the optional <code>server/</code> proxy, enable this to keep keys off the browser. The app will call <code>/api/*</code> instead.</div>
+                </div>
+              </label>
+            </div>
+          </>
         )}
-
-        {provider === 'openrouter' && (
-          <div className="space-y-3">
-            <div>
-              <label className="label flex items-center gap-1"><KeyRound className="w-3.5 h-3.5" /> OpenRouter API key</label>
-              <input type="password" className="input mt-1" placeholder="sk-or-..." value={state.settings.openrouterKey} onChange={e => save({ settings: { openrouterKey: e.target.value.trim() } })} />
-              <p className="text-xs text-ink-500 mt-1">Free tier: 20 req/min, 50 req/day. Get a key at <a className="text-brand-600 hover:underline" href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">openrouter.ai/keys</a>. Top up $10 → 1000 req/day.</p>
-            </div>
-            <div>
-              <label className="label">Model</label>
-              <select className="input mt-1" value={state.settings.openrouterModel} onChange={e => save({ settings: { openrouterModel: e.target.value } })}>
-                <option value="deepseek/deepseek-r1:free">DeepSeek R1 (best reasoning, free)</option>
-                <option value="deepseek/deepseek-chat-v3.1:free">DeepSeek Chat V3.1 (free)</option>
-                <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (free)</option>
-                <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Exp (free)</option>
-                <option value="qwen/qwen-2.5-72b-instruct:free">Qwen 2.5 72B (free)</option>
-                <option value="nvidia/llama-3.1-nemotron-70b-instruct:free">Nemotron 70B (free)</option>
-              </select>
-            </div>
-          </div>
-        )}
-
-        {provider === 'gemini' && (
-          <div className="space-y-3">
-            <div>
-              <label className="label flex items-center gap-1"><KeyRound className="w-3.5 h-3.5" /> Gemini API key</label>
-              <input type="password" className="input mt-1" placeholder="AIza..." value={state.settings.geminiKey} onChange={e => save({ settings: { geminiKey: e.target.value.trim() } })} />
-              <p className="text-xs text-ink-500 mt-1">Get at <a className="text-brand-600 hover:underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a>. Free-tier was cut to 500 req/day for Flash in Dec 2025 — OK for image doubts, tight for text. Keep this key even on other providers so vision works.</p>
-            </div>
-            <div>
-              <label className="label">Model</label>
-              <select className="input mt-1" value={state.settings.geminiModel} onChange={e => save({ settings: { geminiModel: e.target.value } })}>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash (recommended)</option>
-                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (100/day)</option>
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-              </select>
-            </div>
-          </div>
-        )}
-
-        {provider === 'anthropic' && (
-          <div className="space-y-3">
-            <div>
-              <label className="label flex items-center gap-1"><KeyRound className="w-3.5 h-3.5" /> Anthropic API key</label>
-              <input type="password" className="input mt-1" placeholder="sk-ant-..." value={state.settings.anthropicKey} onChange={e => save({ settings: { anthropicKey: e.target.value.trim() } })} />
-              <p className="text-xs text-ink-500 mt-1">Paid, highest quality. Get at <a className="text-brand-600 hover:underline" href="https://console.anthropic.com" target="_blank" rel="noreferrer">console.anthropic.com</a>.</p>
-            </div>
-            <div>
-              <label className="label">Model</label>
-              <select className="input mt-1" value={state.settings.anthropicModel} onChange={e => save({ settings: { anthropicModel: e.target.value } })}>
-                <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (recommended)</option>
-                <option value="claude-opus-4-6">Claude Opus 4.6 (highest quality)</option>
-                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (cheapest)</option>
-              </select>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-3 flex items-center gap-2 text-xs">
-          {providerOk
-            ? <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />Key configured</span>
-            : <span className="text-amber-600 flex items-center gap-1"><Info className="w-3.5 h-3.5" />No key yet — AI features won't work</span>
-          }
-        </div>
-
-        <div className="mt-5 p-3 rounded-lg bg-ink-50 dark:bg-ink-900/40 border border-ink-200 dark:border-ink-800">
-          <label className="flex items-start gap-2 cursor-pointer">
-            <input type="checkbox" className="mt-0.5" checked={state.settings.useProxy} onChange={e => save({ settings: { useProxy: e.target.checked } })} />
-            <div>
-              <div className="text-sm font-medium">Use backend proxy</div>
-              <div className="text-xs text-ink-500">If you deployed the optional <code>server/</code> proxy, enable this to keep keys off the browser. The app will call <code>/api/*</code> instead.</div>
-            </div>
-          </label>
-        </div>
       </Card>
 
       {/* Theme */}
