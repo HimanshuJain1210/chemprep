@@ -46,7 +46,7 @@ export default function Shell({ view, onNavigate, state, children }){
             </div>
             <div className="text-left">
               <div className="font-display font-bold leading-tight">ChemPrep</div>
-              <div className="text-[10px] text-ink-500 dark:text-ink-400 leading-tight -mt-0.5">by Prof. Arjun</div>
+              <div className="text-[10px] text-ink-500 dark:text-ink-400 leading-tight -mt-0.5">JEE · NEET Chemistry</div>
             </div>
           </button>
 
