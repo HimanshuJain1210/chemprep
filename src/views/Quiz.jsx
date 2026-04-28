@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Card, SectionTitle, Modal, MD, useToast, Empty } from '../components/UI.jsx';
 import { setState, tickStreak } from '../lib/storage.js';
-import { SYLLABUS, topicById } from '../data/syllabus.js';
+import { topicsFor, topicById } from '../data/syllabus.js';
 import { generateMCQs } from '../lib/ai.js';
 import { Brain, Sparkles, Check, X, RotateCcw, ChevronRight, Target, TrendingUp } from 'lucide-react';
 
 export default function Quiz({ state }){
+  const subject = state.profile && state.profile.subject ? state.profile.subject : "chemistry";
+  const SYLLABUS = topicsFor(subject);
   const toast = useToast();
   const [topicId, setTopicId] = useState(() => paramFromHash('topic') || SYLLABUS[0].id);
   const [difficulty, setDifficulty] = useState('JEE Main');
@@ -223,7 +225,7 @@ function feedbackLine(s, t){
   if (p >= 85) return "Rock-solid. Teach this to a junior — explaining seals it for good.";
   if (p >= 65) return "Good base. Now redo the wrong ones. Don't just 'know why' — solve a variant.";
   if (p >= 40) return "Half-knowledge is expensive in JEE. Revise this topic tonight + 10 fresh MCQs tomorrow.";
-  return "No judgement. Go back to basics of this chapter. Prof. Arjun says: first principles, then problems.";
+  return "No judgement. Go back to the basics of this chapter — first principles, then problems. You will get there.";
 }
 
 function paramFromHash(key){

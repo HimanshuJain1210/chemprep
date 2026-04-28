@@ -1,41 +1,47 @@
 // Unified AI client — supports Groq (recommended), OpenRouter, Gemini, Anthropic.
-// Also supports backend-proxy mode: set settings.useProxy = true and the app calls /api/*.
-//
-// Free tier guidance (April 2026):
-//   • Groq (Llama-3.3-70B, Llama-4) — generous free tier, very fast. RECOMMENDED for text.
-//     Get a key at https://console.groq.com (no credit card).
-//   • OpenRouter — one key, 29 free models including DeepSeek R1 and Llama 4. Rotates well.
-//     Free: 20 RPM, 50 RPD without balance; 1,000 RPD with $10 top-up. https://openrouter.ai/keys
-//   • Google Gemini — free tier reduced in Dec 2025 (Flash: 500/day, Pro: 100/day).
-//     Still best for VISION (image doubts). https://aistudio.google.com/apikey
-//   • Anthropic Claude — no public free tier; paid.
+// Subject-aware: the active subject (chemistry/physics/maths) is injected into prompts.
+// On a deployed host (Vercel) the client always routes through /api/* serverless
+// functions so the user's browser never sees a key.
 
 import { getState } from './storage.js';
 
-export const MENTOR_SYSTEM = `You are **Professor Arjun**, a senior JEE Chemistry mentor with 20 years of teaching experience at a top coaching institute. You prepared thousands of students for JEE Main and JEE Advanced.
+export const MENTOR_SYSTEM = `You are a senior JEE mentor with 20 years of teaching experience across Physics, Chemistry, and Mathematics at a top coaching institute. You have prepared thousands of students for JEE Main and JEE Advanced. Your single goal is to help this student earn the highest possible rank — through clarity, not pressure.
 
 Voice:
 - Direct, concise, Indian-English. No fluff. Mentor tone — treat the student as capable.
-- Use JEE vocabulary (GOC, EAS, CFT, spectrochemical series, etc.) when appropriate.
-- When explaining, give the concept, then the trap students fall into, then 1-2 practice pointers.
-- Never be condescending. Never be vague. When you're unsure, say so.
+- Use precise JEE vocabulary appropriate to the subject (GOC/CFT for chemistry, FBD/SHM for physics, LIATE/Bayes for maths, etc.).
+- When explaining a concept: give the idea, then the trap students fall into, then 1-2 practice pointers.
+- Never be condescending. Never be vague. When you're unsure, say so plainly.
 
 Formatting:
-- Markdown with short sections. Use headings sparingly (### only for multi-part).
-- Equations in plain text with Unicode (ΔG, π, H₂O) or LaTeX-like inline (e.g. K_c, [H+]).
+- Markdown with short sections. Use headings sparingly (### only for multi-part answers).
+- Equations in plain text with Unicode (ΔG, π, H₂O, ∫, √, ∇) or LaTeX-like inline (e.g. K_c, [H+], dy/dx).
 - Keep answers under ~250 words unless a derivation is essential.
-- End with "Try this:" followed by 1 short JEE-style question when helpful.
+- End with "Try this:" followed by one short JEE-style question when helpful.
 
 Care about the student:
-- If they mention stress, backlog anxiety, phone addiction, lack of sleep, or comparison with peers, address it briefly and practically before answering the chemistry question.
-- Recommend 40-45 min focus blocks with 5-10 min breaks. Discourage >90 min streaks.`;
+- If they mention stress, backlog anxiety, phone addiction, lack of sleep, or comparison with peers, address it briefly and practically before answering the academic question.
+- Recommend 40–45 min focus blocks with 5–10 min breaks. Discourage >90 min streaks.
+- Celebrate small wins. Build confidence through visible progress, not pressure.`;
+
+const SUBJECT_LABEL = { chemistry: 'Chemistry', physics: 'Physics', maths: 'Mathematics' };
+export function subjectContext(subjectId){
+  const label = SUBJECT_LABEL[subjectId] || 'Chemistry';
+  return `\n\nThe student is currently working on JEE ${label}. Frame examples, vocabulary, and trap warnings inside ${label} unless the student explicitly asks about another subject.`;
+}
 
 function getCfg(){
-  const s = getState().settings;
-  return s;
+  return getState().settings;
+}
+
+function isDeployed(){
+  if (typeof location === 'undefined') return false;
+  const h = location.hostname || '';
+  return h && !['localhost', '127.0.0.1', '0.0.0.0'].includes(h);
 }
 
 function apiBase(){
+  if (isDeployed()) return '/api';
   const { useProxy } = getCfg();
   return useProxy ? '/api' : null;
 }
@@ -55,13 +61,10 @@ async function postJSON(url, body, headers){
   try { return JSON.parse(text); } catch { return text; }
 }
 
-/** Robust JSON extractor — strips ```json fences, finds first {..} or [..]. */
 export function extractJSON(text){
   if (typeof text !== 'string') return text;
-  // strip code fences
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   const candidate = fenced ? fenced[1] : text;
-  // find first { or [
   const startObj = candidate.indexOf('{');
   const startArr = candidate.indexOf('[');
   let start = -1;
@@ -69,7 +72,6 @@ export function extractJSON(text){
   else if (startArr === -1) start = startObj;
   else start = Math.min(startObj, startArr);
   if (start < 0) throw new Error('No JSON object/array found in AI response.');
-  // walk to matching brace
   const stack = [];
   const openMap = { '{': '}', '[': ']' };
   let inStr = false, escape = false;
@@ -92,7 +94,6 @@ export function extractJSON(text){
       }
     }
   }
-  // Try best-effort parse of the whole thing
   try { return JSON.parse(candidate); } catch (e){ throw new Error('Unterminated JSON in AI response.'); }
 }
 
@@ -100,16 +101,14 @@ export function extractJSON(text){
 async function callGemini({ system, messages, json=false, maxTokens=1500, imageData }){
   const cfg = getCfg();
   const key = cfg.geminiKey;
-  const model = cfg.geminiModel || 'gemini-2.0-flash';
-  if (!apiBase() && !key) throw new Error('Add your Gemini API key in Settings. Get a free one at aistudio.google.com/apikey');
+  const model = cfg.geminiModel || 'gemini-2.5-flash';
+  if (!apiBase() && !key) throw new Error('AI is not configured yet. If running locally, add a Gemini key in Settings (free at aistudio.google.com/apikey). On Vercel, set GEMINI_API_KEY in env vars.');
 
-  // Convert our chat messages to Gemini "contents" (role user/model)
   const contents = messages.map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: m.content }]
   }));
   if (imageData && contents.length){
-    // attach image to latest user message
     const last = contents[contents.length - 1];
     last.parts.push({ inline_data: { mime_type: imageData.mime || 'image/png', data: imageData.base64 } });
   }
@@ -139,7 +138,7 @@ async function callGroq({ system, messages, json=false, maxTokens=1500 }){
   const cfg = getCfg();
   const key = cfg.groqKey;
   const model = cfg.groqModel || 'llama-3.3-70b-versatile';
-  if (!apiBase() && !key) throw new Error('Add your Groq API key in Settings. Get a free one at console.groq.com');
+  if (!apiBase() && !key) throw new Error('AI is not configured yet. If running locally, add a Groq key in Settings (free at console.groq.com). On Vercel, set GROQ_API_KEY in env vars.');
 
   const payload = {
     model,
@@ -166,7 +165,7 @@ async function callOpenRouter({ system, messages, json=false, maxTokens=1500 }){
   const cfg = getCfg();
   const key = cfg.openrouterKey;
   const model = cfg.openrouterModel || 'deepseek/deepseek-r1:free';
-  if (!apiBase() && !key) throw new Error('Add your OpenRouter API key in Settings. Get a free one at https://openrouter.ai/keys');
+  if (!apiBase() && !key) throw new Error('AI is not configured yet. If running locally, add an OpenRouter key in Settings (free at openrouter.ai/keys). On Vercel, set OPENROUTER_API_KEY in env vars.');
 
   const payload = {
     model,
@@ -183,7 +182,7 @@ async function callOpenRouter({ system, messages, json=false, maxTokens=1500 }){
   const headers = apiBase() ? {} : {
     Authorization: `Bearer ${key}`,
     'HTTP-Referer': typeof location !== 'undefined' ? location.origin : 'https://chemprep.local',
-    'X-Title': 'ChemPrep'
+    'X-Title': 'JEEPrep'
   };
 
   const data = await postJSON(url, payload, headers);
@@ -197,7 +196,7 @@ async function callAnthropic({ system, messages, json=false, maxTokens=1500 }){
   const cfg = getCfg();
   const key = cfg.anthropicKey;
   const model = cfg.anthropicModel || 'claude-sonnet-4-6';
-  if (!apiBase() && !key) throw new Error('Add your Anthropic API key in Settings.');
+  if (!apiBase() && !key) throw new Error('AI is not configured yet. If running locally, add an Anthropic key in Settings. On Vercel, set ANTHROPIC_API_KEY in env vars.');
 
   const url = apiBase() ? `${apiBase()}/anthropic` : 'https://api.anthropic.com/v1/messages';
   const headers = apiBase() ? {} : {
@@ -234,13 +233,18 @@ export async function ai(params){
 
 export async function chat(userText, { topic, image } = {}){
   const state = getState();
+  const subject = state.profile.subject || 'chemistry';
   const history = state.chat.filter(m => m.content && m.content !== '…').slice(-8).map(m => ({ role: m.role, content: m.content }));
-  const sys = MENTOR_SYSTEM + (topic ? `\n\nThe student is asking in the context of: **${topic.name}** (${topic.branch} chemistry). Subtopics: ${topic.subs.join(', ')}. Watch out for this common trap: ${topic.traps}` : '');
+  let sys = MENTOR_SYSTEM + subjectContext(subject);
+  if (topic){
+    sys += `\n\nThe student is asking in the context of: **${topic.name}** (${topic.branch}, ${SUBJECT_LABEL[topic.subject] || 'Chemistry'}). Subtopics: ${topic.subs.join(', ')}. Watch out for this common trap: ${topic.traps}`;
+  }
   return ai({ system: sys, messages: [...history, { role: 'user', content: userText }], imageData: image });
 }
 
 export async function generateFlashcards(topic, count = 12, level = 'JEE Main'){
-  const sys = MENTOR_SYSTEM + `
+  const subject = topic.subject || 'chemistry';
+  const sys = MENTOR_SYSTEM + subjectContext(subject) + `
 
 Task: generate high-quality flashcards for a JEE student.
 Return STRICT JSON with this shape and NOTHING else:
@@ -249,7 +253,7 @@ Coverage rules:
 - Spread across the sub-areas listed. Mix recall, application, and common-trap items.
 - Avoid trivia. Prefer concepts that appear in JEE Main/Adv.
 - Fronts should be short (under 15 words). Backs may include formulas in Unicode.`;
-  const user = `Topic: ${topic.name} (${topic.branch}). Level: ${level}. Subtopics: ${topic.subs.join(', ')}. Generate exactly ${count} cards.`;
+  const user = `Topic: ${topic.name} (${topic.branch}, ${SUBJECT_LABEL[subject]}). Level: ${level}. Subtopics: ${topic.subs.join(', ')}. Generate exactly ${count} cards.`;
   const out = await ai({ system: sys, messages: [{ role: 'user', content: user }], json: true, maxTokens: 2500 });
   const cards = Array.isArray(out) ? out : (out.cards || out.items || out.flashcards || []);
   if (!Array.isArray(cards) || !cards.length) throw new Error('AI returned no cards. Try regenerating.');
@@ -257,7 +261,8 @@ Coverage rules:
 }
 
 export async function generateMCQs(topic, count = 10, difficulty = 'JEE Main'){
-  const sys = MENTOR_SYSTEM + `
+  const subject = topic.subject || 'chemistry';
+  const sys = MENTOR_SYSTEM + subjectContext(subject) + `
 
 Task: generate ${difficulty}-level multiple-choice questions for active recall.
 Return STRICT JSON:
@@ -266,30 +271,32 @@ Rules:
 - Mix conceptual and numerical. Include at least one trap-based question.
 - Options must be plausible; correct index 0-3.
 - Avoid questions that require diagrams unless the stem is self-contained.`;
-  const user = `Topic: ${topic.name} (${topic.branch}). Subtopics: ${topic.subs.join(', ')}. Count: ${count}.`;
+  const user = `Topic: ${topic.name} (${topic.branch}, ${SUBJECT_LABEL[subject]}). Subtopics: ${topic.subs.join(', ')}. Count: ${count}.`;
   const out = await ai({ system: sys, messages: [{ role: 'user', content: user }], json: true, maxTokens: 3000 });
   const qs = Array.isArray(out) ? out : (out.questions || out.items || []);
   if (!Array.isArray(qs) || !qs.length) throw new Error('AI returned no questions.');
   return qs.filter(x => x?.q && Array.isArray(x?.options) && x.options.length === 4 && Number.isInteger(x.answer));
 }
 
-export async function suggestWeekPlan({ pending, backlogs, weekTargetMins, cls }){
-  const sys = MENTOR_SYSTEM + `
+export async function suggestWeekPlan({ pending, backlogs, weekTargetMins, cls, schoolStart, schoolEnd, leaveDays, subject }){
+  const subjectLabel = SUBJECT_LABEL[subject] || 'Chemistry';
+  const sys = MENTOR_SYSTEM + subjectContext(subject) + `
 
-Task: design a balanced, realistic weekly JEE Chemistry plan.
+Task: design a balanced, realistic weekly JEE ${subjectLabel} plan that respects the student's school schedule and rest days.
 Return STRICT JSON with days Mon..Sun, each an array of blocks:
 {"Mon":[{"time":"HH:MM","label":"short label","kind":"study|revision|school|break","topicId":"id-or-null"}], ..., "Sun":[...]}
 Rules:
-- Use hour-increment slots 06:00 to 22:00.
-- Weekday mornings 08:00-14:00 → "school".
-- Include short "break" blocks so no study streak exceeds ~90 min.
+- Use hour-increment slots between 06:00 and 22:00.
+- Place "school" blocks during the student's school hours (${schoolStart || '08:00'}-${schoolEnd || '14:00'}) on weekdays — except on the student's leave days [${(leaveDays || []).join(', ') || 'none'}], where school is skipped and that time becomes free study/rest.
+- Include short "break" blocks so no study streak exceeds ~90 min. Mention water + a few minutes off-screen in labels when natural.
 - Put 2 revision blocks across the week (Wed + Sat recommended).
 - Saturday afternoon: one 90-min problem-solving session.
 - Sunday: lighter; include a 60-min weekly review block.
 - Target total study/revision ≈ ${weekTargetMins} minutes.
 - Prioritise backlogs. Match topicId to one of the provided ids (use null otherwise).`;
   const topicList = pending.map(t => `${t.id} — ${t.name} (${t.branch}, weight ${t.weight})`).join('\n');
-  const user = `Student: Class ${cls}. Weekly target: ${weekTargetMins} min.
+  const user = `Student: Class ${cls}. Subject focus this week: ${subjectLabel}. Weekly target: ${weekTargetMins} min.
+School: ${schoolStart || '08:00'}–${schoolEnd || '14:00'} on weekdays. Leave days (no school): ${(leaveDays || []).join(', ') || 'none'}.
 Topics still pending (id — name — branch — weight):
 ${topicList}
 Backlogs (prioritise these): ${backlogs.length ? backlogs.join(', ') : 'none'}
@@ -300,9 +307,10 @@ Design the plan now.`;
 export async function solveImageDoubt(imageBase64, mime, extraContext = ''){
   const cfg = getCfg();
   if (cfg.provider !== 'gemini') throw new Error('Image doubt-solving currently requires the Gemini provider (vision). Switch in Settings.');
-  const sys = MENTOR_SYSTEM + `
+  const subject = getState().profile.subject || 'chemistry';
+  const sys = MENTOR_SYSTEM + subjectContext(subject) + `
 
-The student has uploaded a photo of a chemistry problem. Read the question carefully, then:
+The student has uploaded a photo of a JEE problem. Read the question carefully, then:
 1. State what the question is asking (1 line).
 2. Give the relevant concept (2-3 lines).
 3. Solve step-by-step with units.

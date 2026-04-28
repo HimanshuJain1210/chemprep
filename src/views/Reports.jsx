@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { Card, SectionTitle, ProgressBar } from '../components/UI.jsx';
-import { SYLLABUS, BRANCHES } from '../data/syllabus.js';
+import { topicsFor, branchesFor } from '../data/syllabus.js';
 import { weekRange } from '../lib/storage.js';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import { Download, TrendingUp, Clock, FileText, Brain, Target } from 'lucide-react';
@@ -8,6 +8,9 @@ import { Download, TrendingUp, Clock, FileText, Brain, Target } from 'lucide-rea
 const COLORS = ['#f97316', '#10b981', '#0ea5e9', '#6366f1', '#f43f5e'];
 
 export default function Reports({ state }){
+  const subject = state.profile && state.profile.subject ? state.profile.subject : "chemistry";
+  const SYLLABUS = topicsFor(subject);
+  const BRANCHES = branchesFor(subject);
   const reportRef = useRef(null);
 
   const doneCount = SYLLABUS.filter(t => state.syllabus[t.id]?.status === 'done').length;
@@ -180,7 +183,7 @@ export default function Reports({ state }){
             </div>
           </Card>
           <Card>
-            <h3 className="font-semibold mb-2">Prof. Arjun's weekly note</h3>
+            <h3 className="font-semibold mb-2">Your weekly mentor note</h3>
             <p className="text-sm italic text-ink-600 dark:text-ink-300">
               {mentorNote({ weeklyMins, target: state.profile.weekTargetMins || 1500, quizAvg, overallPct, streak: state.streak?.count || 0 })}
             </p>

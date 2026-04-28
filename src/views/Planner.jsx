@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Card, SectionTitle, Modal, useToast, Empty } from '../components/UI.jsx';
-import { setState, tickStreak, todayISO, weekRange } from '../lib/storage.js';
+import { setState, tickStreak, todayISO, weekRange, getState } from '../lib/storage.js';
 import { suggestWeekPlan } from '../lib/ai.js';
 import { SYLLABUS, topicById } from '../data/syllabus.js';
 import {
   Plus, Trash2, Sparkles, Save, CalendarDays, Clock, Phone, StickyNote,
-  BookOpen, Coffee, School, Repeat
+  BookOpen, Coffee, School, Repeat, Eraser
 } from 'lucide-react';
 
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -31,6 +31,8 @@ export default function Planner({ go, state }){
     return weekRange().reduce((sum, d) => sum + (state.planner.logs[d]?.studiedMins || 0), 0);
   }, [state.planner.logs]);
 
+  const blocksThisWeek = DAYS.reduce((n, d) => n + ((state.planner.weekly[d] || []).length), 0);
+
   const addBlock = () => {
     const existing = state.planner.weekly[addDay] || [];
     const nextList = [...existing, { id: Math.random().toString(36).slice(2, 9), ...block }]
@@ -47,6 +49,20 @@ export default function Planner({ go, state }){
     toast.push('Removed', 'info');
   };
 
+  const clearWeek = () => {
+    if (blocksThisWeek === 0) {
+      toast.push('Week is already empty.', 'info');
+      return;
+    }
+    if (!confirm(`Clear all ${blocksThisWeek} block${blocksThisWeek === 1 ? '' : 's'} from this week? Your daily logs and streak stay safe.`)) return;
+    setState({
+      planner: {
+        weekly: { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [], Sat: [], Sun: [] }
+      }
+    });
+    toast.push('Week cleared. Ready for a fresh plan.', 'success');
+  };
+
   const openAdd = (day) => {
     setAddDay(day);
     setAddOpen(true);
@@ -55,14 +71,21 @@ export default function Planner({ go, state }){
   const aiSuggest = async () => {
     setAiLoading(true);
     try {
-      const pending = SYLLABUS.filter(t => (state.syllabus[t.id]?.status || 'todo') !== 'done');
+      const subject = state.profile?.subject || 'chemistry';
+      const pending = SYLLABUS
+        .filter(t => t.subject === subject)
+        .filter(t => (state.syllabus[t.id]?.status || 'todo') !== 'done');
       const backlogs = pending
         .filter(t => state.syllabus[t.id]?.status === 'doing')
         .map(t => t.id);
       const raw = await suggestWeekPlan({
         pending, backlogs,
         weekTargetMins: weekTarget,
-        cls: state.profile.cls
+        cls: state.profile.cls,
+        schoolStart: state.profile.schoolStart || '08:00',
+        schoolEnd: state.profile.schoolEnd || '14:00',
+        leaveDays: state.profile.leaveDays || [],
+        subject
       });
       const plan = raw.weekly || raw.plan || raw;
       const weekly = {};
@@ -80,7 +103,7 @@ export default function Planner({ go, state }){
           .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
       }
       setState({ planner: { weekly } });
-      toast.push('Prof. Arjun drafted your week. Review and tweak.', 'success');
+      toast.push('Your week is drafted. Review and tweak.', 'success');
     } catch (e){
       toast.push(e.message || 'AI plan failed', 'error');
     } finally {
@@ -100,6 +123,10 @@ export default function Planner({ go, state }){
         subtitle="Design your week, log what you studied, watch your screen time."
         actions={
           <>
+            <button className="btn-ghost" onClick={clearWeek} disabled={aiLoading} title="Wipe every block from this week">
+              <Eraser className="w-4 h-4" />
+              Clear week
+            </button>
             <button className="btn-secondary" onClick={aiSuggest} disabled={aiLoading}>
               <Sparkles className="w-4 h-4" />
               {aiLoading ? 'Drafting…' : 'AI draft my week'}
@@ -107,6 +134,53 @@ export default function Planner({ go, state }){
           </>
         }
       />
+
+      {/* School schedule — used by AI planner to respect real-life constraints */}
+      <Card className="mb-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <div className="label flex items-center gap-1"><School className="w-3.5 h-3.5" /> School / coaching hours</div>
+            <div className="text-xs text-ink-500">Tell the AI when you're not available — it'll plan around it.</div>
+          </div>
+          <div>
+            <label className="label">Start</label>
+            <input type="time" className="input mt-1 w-28"
+              value={state.profile?.schoolStart || '08:00'}
+              onChange={e => setState({ profile: { schoolStart: e.target.value } })}
+            />
+          </div>
+          <div>
+            <label className="label">End</label>
+            <input type="time" className="input mt-1 w-28"
+              value={state.profile?.schoolEnd || '14:00'}
+              onChange={e => setState({ profile: { schoolEnd: e.target.value } })}
+            />
+          </div>
+          <div className="flex-1 min-w-[260px]">
+            <label className="label">Off days (no school)</label>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {DAYS.map(d => {
+                const off = (state.profile?.leaveDays || []).includes(d);
+                return (
+                  <button
+                    key={d}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
+                      off
+                        ? 'bg-amber-500 text-white border-amber-500'
+                        : 'bg-white dark:bg-ink-800 text-ink-600 dark:text-ink-300 border-ink-200 dark:border-ink-700'
+                    }`}
+                    onClick={() => {
+                      const cur = state.profile?.leaveDays || [];
+                      const next = off ? cur.filter(x => x !== d) : [...cur, d];
+                      setState({ profile: { leaveDays: next } });
+                    }}
+                  >{d}</button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </Card>
 
       {/* Today log */}
       <Card className="mb-5">

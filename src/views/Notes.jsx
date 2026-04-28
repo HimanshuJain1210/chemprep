@@ -1,440 +1,255 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  StickyNote, Plus, Trash2, Search, Tag, BookOpen, FlaskConical, Atom,
-  Hexagon, Save, Clock, Pin, PinOff, ChevronDown, X, Filter
-} from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Card, SectionTitle, Modal, useToast, Empty } from '../components/UI.jsx';
-import { getState, setState } from '../lib/storage.js';
-import { SYLLABUS } from '../data/syllabus.js';
+import { setState, todayISO } from '../lib/storage.js';
+import { topicsFor, topicById, subjectName } from '../data/syllabus.js';
+import { Plus, Search, Save, Trash2, StickyNote, Tag, X } from 'lucide-react';
 
-// ── Subject meta ─────────────────────────────────────────────────────────────
-const SUBJECTS = [
-  { id: 'all',       label: 'All',      icon: BookOpen,    cls: 'bg-ink-100 text-ink-700 dark:bg-ink-800 dark:text-ink-200' },
-  { id: 'chemistry', label: 'Chemistry',icon: FlaskConical, cls: 'bg-brand-500/15 text-brand-700 dark:text-brand-300' },
-  { id: 'physics',   label: 'Physics',  icon: Atom,        cls: 'bg-violet-500/15 text-violet-700 dark:text-violet-300' },
-  { id: 'maths',     label: 'Maths',    icon: Hexagon,     cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
-];
+const newId = () => Math.random().toString(36).slice(2, 10);
 
-const SUBJECT_DOT = {
-  chemistry: 'bg-brand-500',
-  physics:   'bg-violet-500',
-  maths:     'bg-amber-500',
-};
-
-function makeId() {
-  return Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
-}
-
-function fmtDate(iso) {
-  const d = new Date(iso);
-  const now = new Date();
-  const diff = (now - d) / 1000;
-  if (diff < 60)  return 'just now';
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-}
-
-// ── Tiny rich-ish textarea editor ────────────────────────────────────────────
-function NoteEditor({ note, onChange, onSave, saving }) {
-  const ta = useRef(null);
-
-  // auto-resize
-  useEffect(() => {
-    if (ta.current) {
-      ta.current.style.height = 'auto';
-      ta.current.style.height = ta.current.scrollHeight + 'px';
-    }
-  }, [note.content]);
-
-  return (
-    <div className="flex flex-col gap-3 h-full">
-      <input
-        className="input text-lg font-semibold font-display"
-        placeholder="Note title…"
-        value={note.title}
-        onChange={e => onChange({ ...note, title: e.target.value })}
-      />
-      <textarea
-        ref={ta}
-        className="input resize-none flex-1 font-mono text-sm leading-relaxed min-h-[260px]"
-        placeholder={`Write your notes here…\n\nMarkdown-like tips:\n• Use ==highlight== for key terms\n• Use ## for headings\n• Use - for bullet lists`}
-        value={note.content}
-        onChange={e => onChange({ ...note, content: e.target.value })}
-      />
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        {/* Tags */}
-        <TagInput tags={note.tags || []} onChange={tags => onChange({ ...note, tags })} />
-        <button
-          className="btn-primary gap-2"
-          onClick={onSave}
-          disabled={saving}
-        >
-          <Save className="w-4 h-4" />
-          {saving ? 'Saving…' : 'Save note'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function TagInput({ tags, onChange }) {
-  const [input, setInput] = useState('');
-  const add = () => {
-    const t = input.trim().toLowerCase();
-    if (t && !tags.includes(t)) onChange([...tags, t]);
-    setInput('');
-  };
-  return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <Tag className="w-3.5 h-3.5 text-ink-400" />
-      {tags.map(t => (
-        <span key={t} className="chip chip-ink text-xs gap-1">
-          {t}
-          <button onClick={() => onChange(tags.filter(x => x !== t))} className="hover:text-red-500">
-            <X className="w-3 h-3" />
-          </button>
-        </span>
-      ))}
-      <input
-        className="input py-0.5 px-2 text-xs w-24"
-        placeholder="+ tag"
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(); } }}
-        onBlur={add}
-      />
-    </div>
-  );
-}
-
-// ── Render note content with basic markdown-ish styling ──────────────────────
-function NoteContent({ content }) {
-  const lines = (content || '').split('\n');
-  return (
-    <div className="text-sm leading-relaxed space-y-1 font-mono">
-      {lines.map((line, i) => {
-        if (line.startsWith('## '))
-          return <p key={i} className="font-semibold text-base font-display">{line.slice(3)}</p>;
-        if (line.startsWith('# '))
-          return <p key={i} className="font-bold text-lg font-display">{line.slice(2)}</p>;
-        if (line.startsWith('- ') || line.startsWith('• '))
-          return <p key={i} className="pl-3 before:content-['•'] before:mr-2 before:text-brand-500">{line.slice(2)}</p>;
-        // highlight ==term==
-        const parts = line.split(/(==.+?==)/g);
-        return (
-          <p key={i}>
-            {parts.map((p, j) =>
-              p.startsWith('==') && p.endsWith('==')
-                ? <mark key={j} className="bg-amber-200 dark:bg-amber-800/50 text-amber-900 dark:text-amber-200 px-0.5 rounded">{p.slice(2, -2)}</mark>
-                : <span key={j}>{p}</span>
-            )}
-          </p>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── Main Notes view ──────────────────────────────────────────────────────────
-export default function Notes({ go, state }) {
+export default function Notes({ state }){
   const toast = useToast();
+  const subject = state.profile?.subject || 'chemistry';
+  const allNotes = state.notes || [];
+  const [scope, setScope] = useState('subject'); // 'subject' | 'all'
+  const [query, setQuery] = useState('');
+  const [editing, setEditing] = useState(null); // null | note object
 
-  // notes stored in state.notes (array)
-  const notes = state.notes || [];
-
-  const [subject, setSubject] = useState('all');
-  const [search, setSearch]   = useState('');
-  const [selected, setSelected] = useState(null); // note being edited/viewed
-  const [editDraft, setEditDraft] = useState(null);
-  const [saving, setSaving]   = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [newNote, setNewNote] = useState({ title: '', subject: 'chemistry', topicId: '', content: '', tags: [] });
-  const [deleteId, setDeleteId] = useState(null);
-
-  // filter notes
-  const filtered = notes
-    .filter(n => subject === 'all' || n.subject === subject)
-    .filter(n => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return (
+  // Sort newest first; filter
+  const filtered = useMemo(() => {
+    let list = [...allNotes];
+    if (scope === 'subject') list = list.filter(n => n.subject === subject);
+    if (query.trim()){
+      const q = query.toLowerCase();
+      list = list.filter(n =>
         (n.title || '').toLowerCase().includes(q) ||
-        (n.content || '').toLowerCase().includes(q) ||
-        (n.tags || []).some(t => t.includes(q))
+        (n.body || '').toLowerCase().includes(q)
       );
-    })
-    .sort((a, b) => {
-      if (a.pinned && !b.pinned) return -1;
-      if (!a.pinned && b.pinned) return 1;
-      return new Date(b.updatedAt) - new Date(a.updatedAt);
+    }
+    list.sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
+    return list;
+  }, [allNotes, subject, scope, query]);
+
+  const startNew = () => {
+    setEditing({
+      id: newId(),
+      title: '',
+      body: '',
+      subject,
+      topicId: '',
+      created: new Date().toISOString(),
+      updated: new Date().toISOString(),
+      isNew: true
     });
-
-  const openNote = (note) => {
-    setSelected(note);
-    setEditDraft({ ...note });
   };
 
-  const saveEdit = () => {
-    if (!editDraft) return;
-    setSaving(true);
-    const updated = notes.map(n =>
-      n.id === editDraft.id ? { ...editDraft, updatedAt: new Date().toISOString() } : n
-    );
-    setState({ notes: updated });
-    setSelected({ ...editDraft, updatedAt: new Date().toISOString() });
-    setSaving(false);
-    toast.push('Note saved', 'success');
-  };
-
-  const createNote = () => {
-    if (!newNote.title.trim()) { toast.push('Add a title first', 'error'); return; }
+  const saveEditing = () => {
+    if (!editing) return;
+    if (!editing.title.trim() && !editing.body.trim()){
+      toast.push('Empty note — nothing to save.', 'info');
+      setEditing(null);
+      return;
+    }
     const note = {
-      id: makeId(),
-      ...newNote,
-      pinned: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      id: editing.id,
+      title: editing.title.trim() || 'Untitled note',
+      body: editing.body.trim(),
+      subject: editing.subject || subject,
+      topicId: editing.topicId || '',
+      created: editing.created || new Date().toISOString(),
+      updated: new Date().toISOString()
     };
-    setState({ notes: [note, ...notes] });
-    setCreateOpen(false);
-    setNewNote({ title: '', subject: 'chemistry', topicId: '', content: '', tags: [] });
-    toast.push('Note created', 'success');
-    // open it immediately
-    setSelected(note);
-    setEditDraft({ ...note });
+    const others = allNotes.filter(n => n.id !== note.id);
+    setState({ notes: [...others, note] });
+    setEditing(null);
+    toast.push(editing.isNew ? 'Note saved.' : 'Note updated.', 'success');
   };
 
-  const deleteNote = (id) => {
-    setState({ notes: notes.filter(n => n.id !== id) });
-    if (selected?.id === id) { setSelected(null); setEditDraft(null); }
-    setDeleteId(null);
-    toast.push('Note deleted', 'info');
+  const remove = (id) => {
+    if (!confirm('Delete this note? Cannot be undone.')) return;
+    setState({ notes: allNotes.filter(n => n.id !== id) });
+    toast.push('Deleted.', 'info');
   };
 
-  const togglePin = (id) => {
-    setState({ notes: notes.map(n => n.id === id ? { ...n, pinned: !n.pinned } : n) });
+  const counts = {
+    chemistry: allNotes.filter(n => n.subject === 'chemistry').length,
+    physics:   allNotes.filter(n => n.subject === 'physics').length,
+    maths:     allNotes.filter(n => n.subject === 'maths').length
   };
-
-  // Topics for selected subject in create modal
-  const subjectTopics = SYLLABUS.filter(t =>
-    newNote.subject === 'chemistry'
-      ? true // existing chemistry syllabus
-      : t.subject === newNote.subject
-  );
 
   return (
     <div>
       <SectionTitle
         title="Notes"
-        subtitle="Save key concepts, formulas, tricks — tagged by subject and chapter."
+        subtitle={`Quick capture — doubts, tricks, connections you'll regret losing. Currently in ${subjectName(subject)}.`}
         actions={
-          <button className="btn-primary" onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4" /> New note
-          </button>
+          <>
+            <button className="btn-primary" onClick={startNew}>
+              <Plus className="w-4 h-4" /> New note
+            </button>
+          </>
         }
       />
 
-      {/* Subject filter + search */}
-      <div className="flex flex-wrap items-center gap-2 mb-5">
-        {SUBJECTS.map(s => (
-          <button
-            key={s.id}
-            onClick={() => setSubject(s.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border transition-all
-              ${subject === s.id ? s.cls + ' border-current' : 'border-transparent text-ink-500 hover:bg-ink-100 dark:hover:bg-ink-800'}`}
-          >
-            <s.icon className="w-3.5 h-3.5" />
-            {s.label}
-          </button>
-        ))}
-        <div className="ml-auto relative">
-          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input
-            className="input pl-8 w-56 py-1.5 text-sm"
-            placeholder="Search notes…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/* Layout: list + editor */}
-      <div className="grid lg:grid-cols-[320px_1fr] gap-4 items-start">
-        {/* Notes list */}
-        <div className="space-y-2">
-          {filtered.length === 0 && (
-            <Empty
-              icon={StickyNote}
-              title="No notes yet"
-              desc={search ? 'No notes match your search.' : 'Hit "+ New note" to start capturing ideas.'}
+      {/* Search + scope */}
+      <Card className="mb-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
+            <input
+              className="input pl-9"
+              placeholder="Search title or body…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
             />
-          )}
-          {filtered.map(note => (
-            <div
-              key={note.id}
-              onClick={() => openNote(note)}
-              className={`group relative rounded-xl border p-3.5 cursor-pointer transition-all
-                ${selected?.id === note.id
-                  ? 'border-brand-500 bg-brand-500/5'
-                  : 'border-ink-200 dark:border-ink-700 hover:border-brand-400 hover:bg-ink-50 dark:hover:bg-ink-800/50'}`}
+          </div>
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => setScope('subject')}
+              className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                scope === 'subject'
+                  ? 'bg-brand-500 text-white'
+                  : 'bg-ink-100 dark:bg-ink-800 text-ink-600 dark:text-ink-300'
+              }`}
             >
-              <div className="flex items-start gap-2">
-                {/* subject dot */}
-                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${SUBJECT_DOT[note.subject] || 'bg-ink-400'}`} />
-                <div className="min-w-0 flex-1">
-                  <div className="font-semibold text-sm truncate">{note.title || 'Untitled'}</div>
-                  <div className="text-xs text-ink-500 mt-0.5 line-clamp-2">
-                    {note.content?.slice(0, 90) || 'No content'}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    {(note.tags || []).slice(0, 3).map(t => (
-                      <span key={t} className="text-[10px] bg-ink-100 dark:bg-ink-700 text-ink-500 dark:text-ink-300 px-1.5 py-0.5 rounded-md">{t}</span>
-                    ))}
-                    <span className="text-[10px] text-ink-400 ml-auto flex items-center gap-0.5">
-                      <Clock className="w-3 h-3" />
-                      {fmtDate(note.updatedAt)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* pin + delete actions */}
-              <div className="absolute top-2 right-2 hidden group-hover:flex items-center gap-1">
-                <button
-                  onClick={e => { e.stopPropagation(); togglePin(note.id); }}
-                  className="p-1 rounded-lg hover:bg-ink-200 dark:hover:bg-ink-700"
-                  title={note.pinned ? 'Unpin' : 'Pin'}
-                >
-                  {note.pinned
-                    ? <PinOff className="w-3.5 h-3.5 text-brand-500" />
-                    : <Pin className="w-3.5 h-3.5 text-ink-400" />}
-                </button>
-                <button
-                  onClick={e => { e.stopPropagation(); setDeleteId(note.id); }}
-                  className="p-1 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30"
-                  title="Delete"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                </button>
-              </div>
-              {note.pinned && (
-                <span className="absolute top-2 right-2 group-hover:hidden">
-                  <Pin className="w-3 h-3 text-brand-400" />
-                </span>
-              )}
-            </div>
-          ))}
+              {subjectName(subject)} ({counts[subject] || 0})
+            </button>
+            <button
+              onClick={() => setScope('all')}
+              className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                scope === 'all'
+                  ? 'bg-brand-500 text-white'
+                  : 'bg-ink-100 dark:bg-ink-800 text-ink-600 dark:text-ink-300'
+              }`}
+            >
+              All ({allNotes.length})
+            </button>
+          </div>
         </div>
+      </Card>
 
-        {/* Editor panel */}
-        {selected && editDraft ? (
-          <Card className="sticky top-24">
-            <div className="flex items-center gap-2 mb-4">
-              <span className={`w-2.5 h-2.5 rounded-full ${SUBJECT_DOT[selected.subject] || 'bg-ink-400'}`} />
-              <span className="text-xs text-ink-500 capitalize">{selected.subject}</span>
-              {selected.topicId && (
-                <>
-                  <span className="text-ink-300 dark:text-ink-600">·</span>
-                  <span className="text-xs text-ink-500">{SYLLABUS.find(t => t.id === selected.topicId)?.name || selected.topicId}</span>
-                </>
-              )}
-              <span className="ml-auto text-xs text-ink-400">{fmtDate(selected.updatedAt)}</span>
-            </div>
-            <NoteEditor
-              note={editDraft}
-              onChange={setEditDraft}
-              onSave={saveEdit}
-              saving={saving}
-            />
-          </Card>
-        ) : (
-          <Card className="sticky top-24 flex flex-col items-center justify-center py-16 text-center">
-            <StickyNote className="w-10 h-10 text-ink-300 mb-3" />
-            <p className="text-ink-500 text-sm">Select a note to read or edit it</p>
-            <p className="text-ink-400 text-xs mt-1">or create a new one above</p>
-          </Card>
-        )}
-      </div>
+      {/* List */}
+      {filtered.length === 0 ? (
+        <Empty
+          icon="📝"
+          title={query ? 'No matches' : 'No notes here yet'}
+          hint={
+            query
+              ? 'Try a different search, or switch scope to "All".'
+              : 'Capture one trick, one doubt, or one weak link from today\'s study. The 60 seconds it takes will save you 30 minutes of re-discovery before the exam.'
+          }
+          action={!query && (
+            <button className="btn-primary" onClick={startNew}>
+              <Plus className="w-4 h-4" /> Write your first note
+            </button>
+          )}
+        />
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filtered.map(n => {
+            const topic = n.topicId ? topicById(n.topicId) : null;
+            return (
+              <Card key={n.id} className="cursor-pointer hover:border-brand-400 transition group" onClick={() => setEditing({ ...n })}>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h3 className="font-semibold text-sm leading-tight flex-1 line-clamp-2">{n.title || 'Untitled'}</h3>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-rose-100 dark:hover:bg-rose-900/30 text-rose-500"
+                    onClick={(e) => { e.stopPropagation(); remove(n.id); }}
+                    title="Delete"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p className="text-xs text-ink-600 dark:text-ink-300 line-clamp-4 whitespace-pre-wrap">{n.body || '—'}</p>
+                <div className="flex flex-wrap items-center gap-1.5 mt-3 text-[11px]">
+                  <span className="chip chip-brand">{subjectName(n.subject)}</span>
+                  {topic && <span className="chip"><Tag className="w-3 h-3" />{topic.name}</span>}
+                  <span className="ml-auto text-ink-400">{relativeTime(n.updated)}</span>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
-      {/* Create note modal */}
+      {/* Edit modal */}
       <Modal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="New note"
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        title={editing?.isNew ? 'New note' : 'Edit note'}
         size="md"
         footer={
           <>
-            <button className="btn-ghost" onClick={() => setCreateOpen(false)}>Cancel</button>
-            <button className="btn-primary" onClick={createNote}><Plus className="w-4 h-4" />Create</button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <div>
-            <label className="label">Title</label>
-            <input
-              className="input mt-1"
-              placeholder="e.g. Nernst Equation tricks"
-              value={newNote.title}
-              onChange={e => setNewNote({ ...newNote, title: e.target.value })}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Subject</label>
-              <select className="input mt-1" value={newNote.subject} onChange={e => setNewNote({ ...newNote, subject: e.target.value, topicId: '' })}>
-                <option value="chemistry">Chemistry</option>
-                <option value="physics">Physics</option>
-                <option value="maths">Maths</option>
-              </select>
-            </div>
-            <div>
-              <label className="label">Topic (optional)</label>
-              <select className="input mt-1" value={newNote.topicId} onChange={e => setNewNote({ ...newNote, topicId: e.target.value })}>
-                <option value="">— none —</option>
-                {SYLLABUS
-                  .filter(t => newNote.subject === 'chemistry' || t.subject === newNote.subject)
-                  .map(t => <option key={t.id} value={t.id}>{t.name}</option>)
-                }
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="label">Content</label>
-            <textarea
-              className="input mt-1 font-mono text-sm min-h-[120px] resize-none"
-              placeholder="Your note content…"
-              value={newNote.content}
-              onChange={e => setNewNote({ ...newNote, content: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="label">Tags</label>
-            <TagInput tags={newNote.tags} onChange={tags => setNewNote({ ...newNote, tags })} />
-          </div>
-        </div>
-      </Modal>
-
-      {/* Confirm delete modal */}
-      <Modal
-        open={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        title="Delete note?"
-        size="sm"
-        footer={
-          <>
-            <button className="btn-ghost" onClick={() => setDeleteId(null)}>Cancel</button>
-            <button className="btn-danger" onClick={() => deleteNote(deleteId)}>
-              <Trash2 className="w-4 h-4" /> Delete
+            {!editing?.isNew && (
+              <button className="btn-danger mr-auto" onClick={() => { remove(editing.id); setEditing(null); }}>
+                <Trash2 className="w-4 h-4" /> Delete
+              </button>
+            )}
+            <button className="btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
+            <button className="btn-primary" onClick={saveEditing}>
+              <Save className="w-4 h-4" /> Save
             </button>
           </>
         }
       >
-        <p className="text-sm text-ink-600 dark:text-ink-400">
-          This note will be permanently deleted. This can't be undone.
-        </p>
+        {editing && (
+          <div className="space-y-3">
+            <div>
+              <label className="label">Title</label>
+              <input
+                className="input mt-1"
+                autoFocus
+                placeholder="e.g. SN1 vs SN2 — solvent rule"
+                value={editing.title}
+                onChange={e => setEditing({ ...editing, title: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Body</label>
+              <textarea
+                className="input mt-1 min-h-[180px] font-mono text-sm"
+                placeholder="Write the note. Markdown ok. Capture WHY, not just WHAT — your future self needs the reasoning, not the answer."
+                value={editing.body}
+                onChange={e => setEditing({ ...editing, body: e.target.value })}
+              />
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Subject</label>
+                <select className="input mt-1" value={editing.subject} onChange={e => setEditing({ ...editing, subject: e.target.value, topicId: '' })}>
+                  <option value="chemistry">Chemistry</option>
+                  <option value="physics">Physics</option>
+                  <option value="maths">Mathematics</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Topic (optional)</label>
+                <select className="input mt-1" value={editing.topicId} onChange={e => setEditing({ ...editing, topicId: e.target.value })}>
+                  <option value="">— none —</option>
+                  {topicsFor(editing.subject).map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
+}
+
+function relativeTime(iso){
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  const diff = Date.now() - t;
+  const m = Math.round(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+;
 }

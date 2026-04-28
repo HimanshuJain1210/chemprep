@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Card, SectionTitle, Modal, MD, useToast, Empty } from '../components/UI.jsx';
 import { setState, tickStreak } from '../lib/storage.js';
-import { SYLLABUS, topicById } from '../data/syllabus.js';
+import { topicsFor, topicById } from '../data/syllabus.js';
 import { grade, dueNow } from '../lib/srs.js';
 import { generateFlashcards } from '../lib/ai.js';
 import {
@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 
 export default function Flashcards({ state }){
+  const subject = state.profile && state.profile.subject ? state.profile.subject : "chemistry";
+  const SYLLABUS = topicsFor(subject);
   const toast = useToast();
   const [topicFilter, setTopicFilter] = useState('all');
   const [mode, setMode] = useState('review'); // review | all

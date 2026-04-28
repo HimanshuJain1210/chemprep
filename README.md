@@ -1,6 +1,6 @@
 # ChemPrep — JEE Chemistry prep planner
 
-An interactive study planner for Class 11–12 JEE aspirants. Built by a chemistry teacher who watched too many good students drown in backlogs. Mentor voice: **Prof. Arjun** (baked into every AI prompt).
+An interactive study planner for Class 11–12 JEE aspirants. Built by a chemistry teacher who watched too many good students drown in backlogs. Every AI response runs through a senior-mentor system prompt — Indian-English, direct, no fluff, focused on traps and practice.
 
 **Stack:** Vite + React 18, Tailwind CSS 3, Recharts, lucide-react, jsPDF + html2canvas. localStorage state. Dark / light / system theme. Mobile-first.
 
@@ -12,7 +12,7 @@ An interactive study planner for Class 11–12 JEE aspirants. Built by a chemist
 - **Quiz (active recall)** — AI-generated JEE Main / Advanced MCQs per topic with explanations; history stored.
 - **Formulas + PYQs** — curated formula sheet and previous-year-style questions for top chapters.
 - **Study groups** — shareable invite code, weekly leaderboard (local demo).
-- **AI tutor (Prof. Arjun)** — chat with context, **image-doubt solving** via Gemini vision.
+- **AI tutor** — chat with context, **image-doubt solving** via Gemini vision.
 - **Reports** — weekly PDF export (charts + mentor note).
 - **Settings** — profile, AI provider (Gemini / Groq / Anthropic), theme, export/import/reset.
 
@@ -126,9 +126,9 @@ chemprep/
 
 All AI prompts route through a system instruction that gives the model this persona:
 
-> You are **Professor Arjun** — 20 years at a top JEE coaching institute. Indian-English. Direct. No fluff. Address stress and phone addiction before chemistry when needed.
+> A senior JEE Chemistry mentor with 20 years at a top coaching institute. Indian-English. Direct. No fluff. Treats the student as capable. Gives the concept, then the trap, then a practice pointer. Addresses stress, phone addiction, and sleep before chemistry when the student raises them.
 
-This is why every response ends with a practice pointer and watches for common JEE traps.
+This is why every response ends with a practice pointer and watches for common JEE traps. The mentor has no name on purpose — the persona is what matters, not branding.
 
 ## Roadmap
 

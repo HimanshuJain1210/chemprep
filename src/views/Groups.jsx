@@ -115,7 +115,7 @@ export default function Groups({ state }){
               </div>
 
               <p className="text-[11px] text-ink-500 mt-3 italic">
-                Prof. Arjun: "If you're at the top — share a weak-area trick with the group. Teaching is the best revision."
+                Mentor tip: if you're at the top — share a weak-area trick with the group. Teaching is the best revision.
               </p>
             </Card>
           );

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Card, ProgressBar, SectionTitle } from '../components/UI.jsx';
-import { SYLLABUS, BRANCHES, topicById } from '../data/syllabus.js';
+import { topicsFor, branchesFor, topicById } from '../data/syllabus.js';
 import { DAILY_TIPS } from '../data/formulas.js';
 import { dueNow } from '../lib/srs.js';
 import { getState, weekRange, weekMinutes } from '../lib/storage.js';
@@ -8,6 +8,9 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { Flame, Target, TrendingUp, Clock, ArrowRight, AlertTriangle, Sparkles, PlayCircle, Phone } from 'lucide-react';
 
 export default function Dashboard({ go, state }){
+  const subject = state.profile && state.profile.subject ? state.profile.subject : "chemistry";
+  const SYLLABUS = topicsFor(subject);
+  const BRANCHES = branchesFor(subject);
   const s = state;
   const totalTopics = SYLLABUS.length;
   const doneCount = SYLLABUS.filter(t => s.syllabus[t.id]?.status === 'done').length;
@@ -52,7 +55,7 @@ export default function Dashboard({ go, state }){
             <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight">Hi {s.profile.name || 'there'} 👋</h1>
             <p className="text-ink-600 dark:text-ink-300 mt-1 text-sm sm:text-base max-w-2xl">
               <span className="italic">"{tip}"</span><br/>
-              <span className="text-xs text-ink-400">— Prof. Arjun</span>
+              <span className="text-xs text-ink-400">— your mentor</span>
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

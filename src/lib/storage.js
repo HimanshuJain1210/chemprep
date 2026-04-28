@@ -7,7 +7,11 @@ export const DEFAULT_STATE = {
     cls: 12,
     targetDate: '',
     weekTargetMins: 1500,
-    screenCapMins: 90
+    screenCapMins: 90,
+    subject: 'chemistry',            // 'chemistry' | 'physics' | 'maths' — active subject
+    schoolStart: '08:00',
+    schoolEnd: '14:00',
+    leaveDays: ['Sun']               // weekday short names that are off-school (e.g. ['Sun'])
   },
   settings: {
     provider: 'groq',                // groq (recommended) | openrouter | gemini | anthropic
@@ -30,6 +34,11 @@ export const DEFAULT_STATE = {
   quizHistory: [],                   // { id, topicId, score, total, date, diff }
   groups: [],                        // { id, name, code, members: [{name, minsThisWeek}] }
   chat: [],                          // { role, content, image? }
+  notes: [],                         // { id, title, body, subject, topicId, updated, created }
+  notifications: {
+    enabled: false,                  // user-toggled in Settings
+    askedAt: null                    // ISO timestamp when permission was requested
+  },
   streak: { count: 0, lastDate: '' },
   createdAt: null
 };

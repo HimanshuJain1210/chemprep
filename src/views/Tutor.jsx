@@ -2,10 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Card, SectionTitle, MD, useToast, useEnterKey } from '../components/UI.jsx';
 import { setState } from '../lib/storage.js';
 import { chat, solveImageDoubt } from '../lib/ai.js';
-import { SYLLABUS, topicById } from '../data/syllabus.js';
+import { topicsFor, topicById } from '../data/syllabus.js';
 import { Sparkles, Send, ImagePlus, User, Bot, X, Trash2 } from 'lucide-react';
 
 export default function Tutor({ state }){
+  const subject = state.profile && state.profile.subject ? state.profile.subject : "chemistry";
+  const SYLLABUS = topicsFor(subject);
   const toast = useToast();
   const [text, setText] = useState('');
   const [topicId, setTopicId] = useState(() => paramFromHash('topic') || '');
@@ -70,7 +72,7 @@ export default function Tutor({ state }){
   return (
     <div className="flex flex-col h-[calc(100vh-160px)]">
       <SectionTitle
-        title="Prof. Arjun — your AI tutor"
+        title="AI tutor"
         subtitle="Ask a doubt, paste a problem photo, or just vent about your week. No judgement."
         actions={
           state.chat.length > 0 && <button className="btn-ghost" onClick={clearChat}><Trash2 className="w-4 h-4" />Clear</button>
@@ -79,7 +81,7 @@ export default function Tutor({ state }){
 
       {/* Topic context selector */}
       <Card className="mb-3">
-        <label className="label">Context topic (optional — helps Prof. Arjun focus)</label>
+        <label className="label">Context topic (optional — helps the tutor focus)</label>
         <select className="input mt-1" value={topicId} onChange={e => setTopicId(e.target.value)}>
           <option value="">— none —</option>
           {SYLLABUS.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -163,7 +165,7 @@ function WelcomeChat(){
         <h3 className="font-semibold">Welcome.</h3>
       </div>
       <p className="text-sm text-ink-600 dark:text-ink-300">
-        I'm Prof. Arjun — your JEE chemistry mentor. Start with one of these or ask your own:
+        Your JEE chemistry tutor here. Start with one of these or ask your own:
       </p>
       <ul className="mt-3 space-y-2 text-sm">
         <li className="p-2 rounded-lg bg-ink-50 dark:bg-ink-900/40">"Why does Markovnikov fail with HBr + peroxides?"</li>
