@@ -251,5 +251,3 @@ function relativeTime(iso){
   if (d < 30) return `${d}d ago`;
   return new Date(iso).toLocaleDateString();
 }
-;
-}
